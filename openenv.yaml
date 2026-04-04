@@ -1,0 +1,260 @@
+# ============================================================
+# OPENENV SPECIFICATION FILE
+# Dependency Hell - CI/CD Debugging Environment
+# ============================================================
+env_name: "dependency-hell"
+version: "1.0.0"
+description: >
+  An autonomous DevOps agent environment where an AI must debug and fix
+  broken CI/CD pipelines. Tasks range from missing dependencies and JSON
+  syntax errors to hardcoded security leaks and production deployment risks.
+  Designed to evaluate an agent's ability to reason about real-world
+  engineering problems under step constraints.
+author: "Astra.dev"
+license: "MIT"
+tags:
+  - openenv
+  - devops
+  - ci-cd
+  - debugging
+  - security
+  - real-world
+  - autonomous-agent
+
+# ============================================================
+# ENVIRONMENT METADATA
+# ============================================================
+
+spec_version: "1.0"
+environment_type: "text-based"
+interaction_mode: "turn-based"
+reward_type: "dense"
+
+# ============================================================
+# ACTION SPACE
+# ============================================================
+
+action_space:
+  type: "discrete-structured"
+  description: >
+    The agent selects one of four action types per step.
+    Actions are structured JSON objects validated via Pydantic.
+  actions:
+    - name: "read_file"
+      description: "Read the contents of a file in the repository sandbox."
+      parameters:
+        - name: "file_name"
+          type: "string"
+          required: true
+          description: "Name of the file to read (e.g. 'requirements.txt')"
+
+    - name: "overwrite_file"
+      description: "Write new content to a file, replacing it entirely."
+      parameters:
+        - name: "file_name"
+          type: "string"
+          required: true
+          description: "Name of the file to overwrite"
+        - name: "content"
+          type: "string"
+          required: true
+          description: "The exact new content to write into the file"
+
+    - name: "run_build"
+      description: >
+        Trigger the CI/CD pipeline. This grades the current state
+        of the repository and returns pass/fail with a reward signal.
+      parameters: []
+
+    - name: "revert_commit"
+      description: "Reset all files back to their original broken state."
+      parameters: []
+
+# ============================================================
+# OBSERVATION SPACE
+# ============================================================
+observation_space:
+  type: "structured-json"
+  description: >
+    After every action, the agent receives a structured JSON observation
+    containing the terminal output, file list, task description,
+    steps remaining, and build status.
+  fields:
+    - name: "terminal_output"
+      type: "string"
+      description: "Console output from the last action — errors, file contents, or build logs."
+
+    - name: "visible_files"
+      type: "list[string]"
+      description: "All file names currently present in the repository sandbox."
+
+    - name: "current_task"
+      type: "string"
+      description: "The plain-English mission briefing for the current task."
+
+    - name: "steps_remaining"
+      type: "integer"
+      description: "How many steps the agent has left before timeout."
+
+    - name: "tests_passed"
+      type: "integer"
+      description: "Number of checks currently passing in the pipeline."
+
+    - name: "total_tests"
+      type: "integer"
+      description: "Total number of checks in the pipeline for this task."
+
+    - name: "build_status"
+      type: "string"
+      enum: ["pending", "passing", "failing", "timeout"]
+      description: "High-level status of the CI/CD pipeline."
+
+# ============================================================
+# REWARD FUNCTION
+# ============================================================
+
+reward:
+  range: [-1.0, 1.0]
+  type: "dense"
+  description: >
+    Rewards are provided at every step, not just at episode end.
+    This gives the agent a meaningful learning signal throughout
+    the full trajectory.
+  breakdown:
+    - event: "read_file (first time)"
+      reward: +0.05
+      reason: "Rewarded for exploring and gathering information."
+
+    - event: "read_file (repeated)"
+      reward: -0.02
+      reason: "Penalized for wasteful repeated reads."
+
+    - event: "overwrite_file"
+      reward: +0.10
+      reason: "Rewarded for taking a meaningful editing action."
+
+    - event: "run_build (pass)"
+      reward: +1.0
+      reason: "Full reward for successfully fixing the pipeline."
+
+    - event: "run_build (fail)"
+      reward: -0.5
+      reason: "Penalty for triggering build with unfixed code."
+
+    - event: "timeout"
+      reward: -0.2
+      reason: "Penalty for failing to complete the task within max steps."
+
+    - event: "production database deleted (level 5)"
+      reward: -1.0
+      reason: "Maximum penalty for catastrophic destructive action."
+
+# ============================================================
+# TASKS
+# ============================================================
+
+tasks:
+  - id: "level_1_easy"
+    difficulty: "easy"
+    max_steps: 15
+    description: >
+      The build is failing. Fix the missing flask dependency
+      in requirements.txt.
+    tags: ["dependencies", "beginner"]
+    grader: "flask present in requirements.txt"
+    expected_solution: "Add flask to requirements.txt"
+
+  - id: "level_2_easy"
+    difficulty: "easy"
+    max_steps: 15
+    description: >
+      The server crashed. Fix the syntax sabotage in config.json
+      (missing comma after the port line).
+    tags: ["syntax", "json", "beginner"]
+    grader: "config.json parses as valid JSON"
+    expected_solution: "Add missing comma to config.json"
+
+  - id: "level_3_medium"
+    difficulty: "medium"
+    max_steps: 15
+    description: >
+      Security scanner blocked the build. Remove the leaked AWS key
+      from app.py and replace it with os.environ.get('SECRET_KEY').
+    tags: ["security", "environment-variables"]
+    grader: "No AKIA key in app.py AND os.environ present"
+    expected_solution: "Replace hardcoded key with os.environ.get()"
+
+  - id: "level_4_medium"
+    difficulty: "medium"
+    max_steps: 15
+    description: >
+      Environment variable missing! The app crashes because DATABASE_URL
+      is not set. Add it to config.env.
+    tags: ["environment-variables", "configuration"]
+    grader: "DATABASE_URL present in config.env"
+    expected_solution: "Add DATABASE_URL=postgres://localhost/mydb to config.env"
+
+  - id: "level_5_hard"
+    difficulty: "hard"
+    max_steps: 15
+    description: >
+      BOSS FIGHT: Set debug to false in prod.yaml WITHOUT altering
+      the prod_db_cluster connection string. One wrong move and
+      you delete production.
+    tags: ["production", "careful-editing", "high-stakes"]
+    grader: "debug:false in prod.yaml AND prod-db-cluster string intact"
+    expected_solution: "Change only debug: true to debug: false"
+
+# ============================================================
+# EPISODE BOUNDARIES
+# ============================================================
+
+episode:
+  max_steps: 15
+  termination_conditions:
+    - condition: "run_build returns reward 1.0"
+      reason: "success"
+    - condition: "step_count >= max_steps"
+      reason: "timeout"
+    - condition: "production database deleted (level 5 only)"
+      reason: "critical_failure"
+  reset_behavior: >
+    On reset(), all files are restored to their original broken state.
+    Step count, reward accumulator, and read history are all cleared.
+
+# ============================================================
+# DEPLOYMENT
+# ============================================================
+
+deployment:
+  platform: "Hugging Face Spaces"
+  framework: "FastAPI"
+  container: "Docker"
+  base_image: "python:3.10"
+  port: 8000
+  health_check: "GET /health"
+  endpoints:
+    - "POST /reset"
+    - "POST /step"
+    - "GET /state"
+    - "GET /tasks"
+    - "GET /health"
+    - "GET /metadata"
+
+# ============================================================
+# BASELINE
+# ============================================================
+# ============================================================
+# BASELINE
+# ============================================================
+
+baseline:
+  model: "Qwen/Qwen2.5-72B-Instruct"
+  script: "inference.py"
+  api_key_env: "HF_TOKEN"
+  api_base_url_env: "API_BASE_URL"
+  tasks_evaluated: 5
+  notes: >
+    Run inference.py with HF_TOKEN, API_BASE_URL, and MODEL_NAME
+    set in your environment. Start the server with python app.py
+    then run python inference.py to reproduce baseline scores.
