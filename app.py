@@ -56,6 +56,8 @@ class ResetRequest(BaseModel):
         default="level_1_easy",
         description="The task to load (e.g., 'level_1_easy', 'level_5_hard')"
     )
+    
+    model_config = {"extra": "allow"}
 
 
 class StepRequest(BaseModel):
@@ -108,28 +110,18 @@ class HealthResponse(BaseModel):
 # ============================================================
 
 @app.post("/reset")
-def reset_environment(request: ResetRequest):
+def reset_environment(request: Optional[ResetRequest] = None):
     """
     Reset the environment to a broken state and return initial observation.
-    This is the first call in any episode.
-    
-    Args:
-        task_id: Which task to load (level_1_easy, level_2_easy, ..., level_5_hard)
-    
-    Returns:
-        Initial DevOpsObservation for the chosen task
-    
-    Raises:
-        HTTPException(400): If task_id is invalid
-        HTTPException(500): If something goes wrong in the environment
     """
     try:
-        logger.info(f"Resetting environment to task: {request.task_id}")
-        obs = env.reset(task_id=request.task_id)
+        task_id = request.task_id if request else "level_1_easy"
+        logger.info(f"Resetting environment to task: {task_id}")
+        obs = env.reset(task_id=task_id)
         logger.info(f"Environment reset successful. Files visible: {obs.visible_files}")
         return obs
     except ValueError as e:
-        logger.error(f"Invalid task_id: {request.task_id}")
+        logger.error(f"Invalid task_id: {task_id}")
         raise HTTPException(status_code=400, detail=f"Invalid task_id: {str(e)}")
     except Exception as e:
         logger.error(f"Error resetting environment: {str(e)}")
