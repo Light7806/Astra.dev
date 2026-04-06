@@ -1,0 +1,4 @@
+[project] 
+version = "1.0.0" 
+description = "Dependency Hell - OpenEnv CI/CD Debugging Environment" 
+requires-python = ">=3.10" 
