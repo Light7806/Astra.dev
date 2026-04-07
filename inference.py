@@ -18,10 +18,9 @@ from openai import OpenAI
 API_KEY      = os.environ.get("HF_TOKEN")
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
+ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
 BENCHMARK    = "dependency-hell"
 MAX_STEPS    = 10
-
 # ============================================================
 # STRUCTURED STDOUT LOGGING — Exact required format
 # ============================================================
