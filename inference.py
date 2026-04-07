@@ -147,8 +147,8 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             message = completion.choices[0].message
 
             if not message.tool_calls:
-                log_step(step=step, action="no_tool_call", reward=0.00, done=False, error="model returned no tool call")
-                rewards.append(0.0)
+                log_step(step=step, action="no_tool_call", reward=0, done=False, error="model returned no tool call")
+                rewards.append(0)
                 steps_taken = step
                 break
 
@@ -160,7 +160,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
 
             # --- Execute action in environment ---
             error_msg = None
-            reward    = 0.0
+            reward    = 0
             done      = False
 
             try:
@@ -210,7 +210,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         log_step(
             step=steps_taken + 1,
             action="exception",
-            reward=0.00,
+            reward=0,
             done=True,
             error=str(e)
         )
@@ -218,13 +218,13 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         steps_taken += 1
 
     finally:
-        score = 1.0 if success else 0.0
+        score = 1 if success else 0
         log_end(success=success, steps=steps_taken, rewards=rewards, score=score)
 
     return {
         "task_id":      task_id,
         "success":      success,
-        "final_score":  1.0 if success else 0.0,
+        "final_score":  1 if success else 0,
         "total_steps":  steps_taken,
         "total_reward": round(sum(rewards), 2)
     }
