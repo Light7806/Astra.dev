@@ -20,7 +20,7 @@ API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1"
 MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
 BENCHMARK    = "dependency-hell"
-MAX_STEPS    = 10
+MAX_STEPS    = 15  # Bumped to 15 to match the environment task limits
 # ============================================================
 # STRUCTURED STDOUT LOGGING — Exact required format
 # ============================================================
@@ -218,13 +218,15 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         steps_taken += 1
 
     finally:
-        score = 1 if success else 0
+        # UPDATED: Score is strictly within (0, 1) to pass hackathon validator
+        score = 0.99 if success else 0.01
         log_end(success=success, steps=steps_taken, rewards=rewards, score=score)
 
     return {
         "task_id":      task_id,
         "success":      success,
-        "final_score":  1 if success else 0,
+        # UPDATED: Score is strictly within (0, 1)
+        "final_score":  0.99 if success else 0.01,
         "total_steps":  steps_taken,
         "total_reward": round(sum(rewards), 2)
     }
@@ -235,7 +237,8 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
 # ============================================================
 def main():
     if not API_KEY:
-        print("[END] success=false steps=0 score=0.000 rewards=", flush=True)
+        # Ensure fail log also complies with the (0, 1) rule
+        print("[END] success=false steps=0 score=0.010 rewards=", flush=True)
         print("ERROR: Please set HF_TOKEN environment variable.", file=sys.stderr)
         sys.exit(1)
 
@@ -263,7 +266,8 @@ def main():
             result = {
                 "task_id":      task_id,
                 "success":      False,
-                "final_score":  0.0,
+                # UPDATED: Score is strictly within (0, 1)
+                "final_score":  0.01,
                 "total_steps":  0,
                 "total_reward": 0.0
             }
@@ -279,7 +283,7 @@ def main():
     for r in results:
         status = "PASS" if r["success"] else "FAIL"
         print(
-            f"  {r['task_id']} | {status} | score={r['final_score']:.1f} | steps={r['total_steps']} | reward={r['total_reward']:+.2f}",
+            f"  {r['task_id']} | {status} | score={r['final_score']:.2f} | steps={r['total_steps']} | reward={r['total_reward']:+.2f}",
             file=sys.stderr
         )
 
