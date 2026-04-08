@@ -355,8 +355,8 @@ class DependencyHellEnv:
         return EpisodeResult(
             task_id=self.current_task.task_id,
             success=success,
-            final_score=1.0 if success else 0.0,
+            final_score=0.99 if success else 0.01,
             total_steps=self.step_count,
             total_reward=self.total_reward,
             termination_reason="success" if success else "timeout" if self.step_count >= self.max_steps else "critical_failure"
-        )
+)

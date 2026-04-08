@@ -166,9 +166,9 @@ class EpisodeResult(BaseModel):
     )
     final_score: float = Field(
         ...,
-        description="Grader score between 0.0 and 1.0.",
-        ge=0.0,
-        le=1.0
+        description="Grader score strictly between 0.0 and 1.0.",
+        gt=0.0,
+        lt=1.0
     )
     total_steps: int = Field(
         ...,
