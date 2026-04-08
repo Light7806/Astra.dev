@@ -347,7 +347,3 @@ in the real world. Unlike toy environments, Dependency Hell:
 ## 📜 License
 
 MIT License — free to use, modify, and build upon.
-Replace your entire README.md with this. Then push:
-cmdgit add .
-git commit -m "final submission"
-git push origin main
