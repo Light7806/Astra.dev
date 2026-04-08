@@ -132,7 +132,7 @@ class DependencyHellEnv:
         # ===== TIMEOUT CHECK =====
         if self.step_count >= self.max_steps:
             log_output = f"❌ TIMEOUT: Max {self.max_steps} steps reached. Episode terminated."
-            reward_obj.total = -0.2
+            reward_obj.total = -0.19
             self.episode_done = True
             done = True
             return self._get_observation(log_output), reward_obj.total, done, {
@@ -147,7 +147,7 @@ class DependencyHellEnv:
                 reward_obj.total = -0.05
             elif action.file_name not in self.current_files:
                 log_output = f"❌ FileNotFoundError: '{action.file_name}' does not exist."
-                reward_obj.total = -0.1
+                reward_obj.total = -0.09
             else:
                 log_output = f"--- {action.file_name} ---\n{self.current_files[action.file_name]}"
                 if action.file_name in self.read_history:
@@ -172,7 +172,7 @@ class DependencyHellEnv:
         elif action.action_type == "revert_commit":
             self.current_files = copy.deepcopy(self.initial_files)
             log_output = "↶ git reset --hard HEAD (Reverted to broken initial state)"
-            reward_obj.total = 0.0
+            reward_obj.total = 0.01
 
         # ===== ACTION: RUN_BUILD (The Grader) =====
         elif action.action_type == "run_build":
