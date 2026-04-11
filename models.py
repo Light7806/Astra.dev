@@ -84,8 +84,8 @@ class DevOpsObservation(BaseModel):
 class DevOpsReward(BaseModel):
     total: float = Field(
         0.01,
-        description="The net reward for this step. Strictly between -0.99 and 0.99.",
-        gt=-1.0,
+        description="The net reward for this step. Strictly between 0.01 and 0.99.",
+        gt=0.0,
         lt=1.0
     )
     task_progress: float = Field(

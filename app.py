@@ -237,7 +237,7 @@ def get_metadata():
         "task_ids": [t.task_id for t in DependencyHellEnv.TASKS],
         "action_space_type": "discrete",
         "observation_space_type": "structured",
-        "reward_range": (-1.0, 1.0),
+        "reward_range": (0.01, 0.99),
         "max_episode_length": 15,
         "spec_compliance": "OpenEnv v1.0"
     }
