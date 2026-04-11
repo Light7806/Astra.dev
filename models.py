@@ -1,163 +1,285 @@
-from pydantic import BaseModel, Field
-from typing import Literal, Optional, List
+"""
+inference.py — Dependency Hell Baseline Agent
+==============================================
+Runs an OpenAI-compatible LLM agent against the Dependency Hell environment.
+Emits structured stdout logs in the required [START] / [STEP] / [END] format.
+"""
+
+import json
+import os
+import sys
+from typing import Optional
+import requests
+from openai import OpenAI
 
 # ============================================================
-# 1. ACTION MODEL
+# CONFIGURATION — All read from environment variables
 # ============================================================
-class DevOpsAction(BaseModel):
-    action_type: Literal[
-        "read_file",
-        "overwrite_file",
-        "run_build",
-        "revert_commit"
-    ] = Field(
-        ...,
-        description=(
-            "The command to execute. "
-            "'read_file' reads a file's contents. "
-            "'overwrite_file' writes new content to a file. "
-            "'run_build' triggers the build/test pipeline and grades the result. "
-            "'revert_commit' resets all files back to their broken initial state."
-        )
-    )
-    file_name: Optional[str] = Field(
-        None,
-        description="Target file (e.g. 'requirements.txt'). Required for read_file and overwrite_file."
-    )
-    content: Optional[str] = Field(
-        None,
-        description="The exact content to write into the file. Required for overwrite_file only."
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN     = os.environ.get("HF_TOKEN")
+ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
+
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
+
+BENCHMARK    = "dependency-hell"
+MAX_STEPS    = 15
+
+# ============================================================
+# STRUCTURED STDOUT LOGGING — Exact required format
+# ============================================================
+
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = str(error).replace('\n', ' ').replace('\r', '') if error else "null"
+    action_clean = str(action).replace('\n', ' ').replace('\r', '')
+    done_val  = str(done).lower()
+    print(
+        f"[STEP] step={step} action={action_clean} reward={reward:.2f} done={done_val} error={error_val}",
+        flush=True,
     )
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {"action_type": "read_file", "file_name": "requirements.txt"},
-                {"action_type": "overwrite_file", "file_name": "requirements.txt", "content": "flask==2.3.0\nrequests==2.28.0"},
-                {"action_type": "run_build"},
-                {"action_type": "revert_commit"}
-            ]
+
+def log_end(success: bool, steps: int, rewards: list) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        flush=True,
+    )
+
+
+# ============================================================
+# OPENAI TOOL DEFINITION
+# ============================================================
+devops_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "take_action",
+            "description": (
+                "Execute a DevOps command on the CI/CD server. "
+                "Start by reading files to understand the problem. "
+                "Then overwrite the broken file with your fix. "
+                "Finally call run_build to verify. You MUST call run_build to complete the task."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action_type": {
+                        "type": "string",
+                        "enum": ["read_file", "overwrite_file", "run_build", "revert_commit"],
+                        "description": "The command to execute."
+                    },
+                    "file_name": {
+                        "type": "string",
+                        "description": "Target file. Required for read_file and overwrite_file."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "New file content. Required for overwrite_file."
+                    }
+                },
+                "required": ["action_type"]
+            }
         }
+    }
+]
+
+
+# ============================================================
+# SINGLE TASK AGENT LOOP
+# ============================================================
+def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict:
+    rewards     = []
+    steps_taken = 0
+    success     = False
+
+    log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
+
+    try:
+        # --- Reset environment ---
+        reset_resp = requests.post(
+            f"{ENV_BASE_URL}/reset",
+            json={"task_id": task_id},
+            timeout=30
+        )
+        reset_resp.raise_for_status()
+        obs = reset_resp.json()
+
+        # --- Build conversation ---
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an elite DevOps AI agent. Fix broken CI/CD pipelines.\n\n"
+                    "STRATEGY:\n"
+                    "1. READ files first to understand what is broken.\n"
+                    "2. Identify the exact problem.\n"
+                    "3. OVERWRITE the broken file with the precise fix.\n"
+                    "4. Call RUN_BUILD to verify.\n\n"
+                    "RULES:\n"
+                    "- You MUST call run_build to complete the task.\n"
+                    "- Do not read the same file twice.\n"
+                    "- Only change what is broken — nothing else.\n"
+                    "- For security tasks: remove hardcoded secrets, use os.environ.get().\n"
+                    "- For production tasks: NEVER delete database connection strings.\n"
+                    "- For env variable tasks: add missing variables to config files.\n"
+                )
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Task: {task_description}\n\n"
+                    f"Initial state:\n{json.dumps(obs, indent=2)}"
+                )
+            }
+        ]
+
+        for step in range(1, MAX_STEPS + 1):
+            completion = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=messages,
+                tools=devops_tools,
+                tool_choice="required",
+                temperature=0.1,
+                max_tokens=1000,
+            )
+
+            message = completion.choices[0].message
+
+            if not message.tool_calls:
+                log_step(step=step, action="no_tool_call", reward=0.01, done=False, error="model returned no tool call")
+                rewards.append(0.01)
+                steps_taken = step
+                break
+
+            tool_call   = message.tool_calls[0]
+            action_args = json.loads(tool_call.function.arguments)
+            action_str  = action_args.get("action_type", "unknown")
+            if action_args.get("file_name"):
+                action_str += f"({action_args['file_name']})"
+
+            error_msg = None
+            reward    = 0.01
+            done      = False
+
+            try:
+                env_resp = requests.post(
+                    f"{ENV_BASE_URL}/step",
+                    json={"action": action_args},
+                    timeout=30
+                )
+                env_resp.raise_for_status()
+                result = env_resp.json()
+
+                obs    = result.get("observation", {})
+                reward = float(result.get("reward", 0.01))
+                done   = bool(result.get("done", False))
+
+                # SAFETY CLAMP — always strictly between 0.01 and 0.99
+                reward = max(0.01, min(0.99, reward))
+
+            except Exception as e:
+                error_msg = str(e)
+                reward    = 0.01
+                done      = False
+
+            rewards.append(reward)
+            steps_taken = step
+
+            log_step(step=step, action=action_str, reward=reward, done=done, error=error_msg)
+
+            messages.append(message)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps({
+                    "terminal_output":  obs.get("terminal_output", ""),
+                    "visible_files":    obs.get("visible_files", []),
+                    "steps_remaining":  obs.get("steps_remaining", 0),
+                    "build_status":     obs.get("build_status", "pending"),
+                    "reward":           reward,
+                    "done":             done
+                })
+            })
+
+            if done:
+                break
+
+        success = len(rewards) > 0 and rewards[-1] >= 0.99
+
+    except Exception as e:
+        log_step(
+            step=steps_taken + 1,
+            action="exception",
+            reward=0.01,
+            done=True,
+            error=str(e)
+        )
+        rewards.append(0.01)
+        steps_taken += 1
+
+    finally:
+        log_end(success=success, steps=steps_taken, rewards=rewards)
+
+    return {
+        "task_id":      task_id,
+        "success":      success,
+        "final_score":  0.99 if success else 0.01,
+        "total_steps":  steps_taken,
+        "total_reward": round(sum(rewards), 2)
     }
 
 
 # ============================================================
-# 2. OBSERVATION MODEL
+# MAIN — RUN ALL TASKS
 # ============================================================
-class DevOpsObservation(BaseModel):
-    terminal_output: str = Field(
-        ...,
-        description="Console output from the last action."
-    )
-    visible_files: List[str] = Field(
-        ...,
-        description="List of all file names currently present in the repository sandbox."
-    )
-    current_task: str = Field(
-        ...,
-        description="The task description the agent is currently trying to solve."
-    )
-    steps_remaining: int = Field(
-        ...,
-        description="How many steps the agent has left before the episode times out.",
-        ge=0
-    )
-    tests_passed: int = Field(
-        ...,
-        description="Number of checks currently passing in the pipeline.",
-        ge=0
-    )
-    total_tests: int = Field(
-        ...,
-        description="Total number of checks in the pipeline for this task.",
-        ge=1
-    )
-    build_status: Literal["pending", "passing", "failing", "timeout"] = Field(
-        ...,
-        description="The current high-level status of the CI/CD pipeline."
-    )
+def main():
+    client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
+
+    try:
+        tasks_resp = requests.get(f"{ENV_BASE_URL}/tasks", timeout=30)
+        tasks_resp.raise_for_status()
+        tasks = tasks_resp.json().get("tasks", [])
+    except Exception as e:
+        print(f"ERROR: Could not reach environment server at {ENV_BASE_URL}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    results = []
+
+    for task in tasks:
+        task_id          = task["task_id"]
+        task_description = task["description"]
+
+        try:
+            result = run_single_task(client, task_id, task_description)
+        except Exception as e:
+            result = {
+                "task_id":      task_id,
+                "success":      False,
+                "final_score":  0.01,
+                "total_steps":  0,
+                "total_reward": 0.01
+            }
+
+        results.append(result)
+
+    passed = sum(1 for r in results if r["success"])
+    avg    = sum(r["final_score"] for r in results) / len(results) if results else 0.0
+    print(f"\n--- BASELINE SUMMARY ---", file=sys.stderr)
+    print(f"Tasks passed : {passed} / {len(results)}", file=sys.stderr)
+    print(f"Average score: {avg:.2f}", file=sys.stderr)
+    for r in results:
+        status = "PASS" if r["success"] else "FAIL"
+        print(
+            f"  {r['task_id']} | {status} | score={r['final_score']:.2f} | steps={r['total_steps']} | reward={r['total_reward']:+.2f}",
+            file=sys.stderr
+        )
 
 
-# ============================================================
-# 3. REWARD MODEL
-# ============================================================
-class DevOpsReward(BaseModel):
-    total: float = Field(
-        0.01,
-        description="The net reward for this step. Strictly between 0.01 and 0.99.",
-        gt=0.0,
-        lt=1.0
-    )
-    task_progress: float = Field(
-        0.01,
-        description="Reward for making measurable progress toward the goal."
-    )
-    efficiency_penalty: float = Field(
-        0.01,
-        description="Negative reward for wasted actions."
-    )
-    build_result: float = Field(
-        0.01,
-        description="Reward signal from the build pipeline."
-    )
-    safety_penalty: float = Field(
-        0.01,
-        description="Penalty for destructive or unsafe actions."
-    )
-
-
-# ============================================================
-# 4. TASK MODEL
-# ============================================================
-class DevOpsTask(BaseModel):
-    task_id: str = Field(
-        ...,
-        description="Unique identifier for this task."
-    )
-    difficulty: Literal["easy", "medium", "hard"] = Field(
-        ...,
-        description="Difficulty tier."
-    )
-    description: str = Field(
-        ...,
-        description="The plain-English mission briefing shown to the agent."
-    )
-    max_steps: int = Field(
-        15,
-        description="Maximum number of steps allowed for this task before timeout.",
-        ge=5,
-        le=30
-    )
-    tags: List[str] = Field(
-        default_factory=list,
-        description="Category tags for this task."
-    )
-
-
-# ============================================================
-# 5. EPISODE RESULT MODEL
-# ============================================================
-class EpisodeResult(BaseModel):
-    task_id: str
-    success: bool = Field(
-        ...,
-        description="True if the agent triggered run_build and passed all checks."
-    )
-    final_score: float = Field(
-        ...,
-        description="Grader score strictly between 0.0 and 1.0.",
-        gt=0.0,
-        lt=1.0
-    )
-    total_steps: int = Field(
-        ...,
-        description="Total number of steps taken in this episode."
-    )
-    total_reward: float = Field(
-        ...,
-        description="Cumulative reward accumulated across the full episode."
-    )
-    termination_reason: Literal["success", "timeout", "critical_failure"] = Field(
-        ...,
-        description="Why the episode ended."
-    )
+if __name__ == "__main__":
+    main()
