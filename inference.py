@@ -1,10 +1,3 @@
-"""
-inference.py — Dependency Hell Baseline Agent
-==============================================
-Runs an OpenAI-compatible LLM agent against the Dependency Hell environment.
-Emits structured stdout logs in the required [START] / [STEP] / [END] format.
-"""
-
 import json
 import os
 import sys
@@ -12,49 +5,25 @@ from typing import Optional
 import requests
 from openai import OpenAI
 
-# ============================================================
-# CONFIGURATION — All read from environment variables
-# ============================================================
+API_KEY      = os.environ.get("HF_TOKEN")
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN     = os.environ.get("HF_TOKEN")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
-
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
-
 BENCHMARK    = "dependency-hell"
 MAX_STEPS    = 15
-
-# ============================================================
-# STRUCTURED STDOUT LOGGING — Exact required format
-# ============================================================
 
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
-
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    error_val = str(error).replace('\n', ' ').replace('\r', '') if error else "null"
-    action_clean = str(action).replace('\n', ' ').replace('\r', '')
+    error_val = error if error else "null"
     done_val  = str(done).lower()
-    print(
-        f"[STEP] step={step} action={action_clean} reward={reward:.2f} done={done_val} error={error_val}",
-        flush=True,
-    )
-
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
 def log_end(success: bool, steps: int, rewards: list) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
-        flush=True,
-    )
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
-
-# ============================================================
-# OPENAI TOOL DEFINITION
-# ============================================================
 devops_tools = [
     {
         "type": "function",
@@ -89,10 +58,6 @@ devops_tools = [
     }
 ]
 
-
-# ============================================================
-# SINGLE TASK AGENT LOOP
-# ============================================================
 def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict:
     rewards     = []
     steps_taken = 0
@@ -101,7 +66,6 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
     log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
 
     try:
-        # --- Reset environment ---
         reset_resp = requests.post(
             f"{ENV_BASE_URL}/reset",
             json={"task_id": task_id},
@@ -110,7 +74,6 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         reset_resp.raise_for_status()
         obs = reset_resp.json()
 
-        # --- Build conversation ---
         messages = [
             {
                 "role": "system",
@@ -132,10 +95,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             },
             {
                 "role": "user",
-                "content": (
-                    f"Task: {task_description}\n\n"
-                    f"Initial state:\n{json.dumps(obs, indent=2)}"
-                )
+                "content": f"Task: {task_description}\n\nInitial state:\n{json.dumps(obs, indent=2)}"
             }
         ]
 
@@ -179,8 +139,6 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
                 obs    = result.get("observation", {})
                 reward = float(result.get("reward", 0.01))
                 done   = bool(result.get("done", False))
-
-                # SAFETY CLAMP — always strictly between 0.01 and 0.99
                 reward = max(0.01, min(0.99, reward))
 
             except Exception as e:
@@ -213,13 +171,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         success = len(rewards) > 0 and rewards[-1] >= 0.99
 
     except Exception as e:
-        log_step(
-            step=steps_taken + 1,
-            action="exception",
-            reward=0.01,
-            done=True,
-            error=str(e)
-        )
+        log_step(step=steps_taken + 1, action="exception", reward=0.01, done=True, error=str(e))
         rewards.append(0.01)
         steps_taken += 1
 
@@ -234,12 +186,13 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         "total_reward": round(sum(rewards), 2)
     }
 
-
-# ============================================================
-# MAIN — RUN ALL TASKS
-# ============================================================
 def main():
-    client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
+    if not API_KEY:
+        print("[END] success=false steps=0 rewards=0.01", flush=True)
+        print("ERROR: Please set HF_TOKEN environment variable.", file=sys.stderr)
+        sys.exit(1)
+
+    client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 
     try:
         tasks_resp = requests.get(f"{ENV_BASE_URL}/tasks", timeout=30)
@@ -275,11 +228,7 @@ def main():
     print(f"Average score: {avg:.2f}", file=sys.stderr)
     for r in results:
         status = "PASS" if r["success"] else "FAIL"
-        print(
-            f"  {r['task_id']} | {status} | score={r['final_score']:.2f} | steps={r['total_steps']} | reward={r['total_reward']:+.2f}",
-            file=sys.stderr
-        )
-
+        print(f"  {r['task_id']} | {status} | score={r['final_score']:.2f} | steps={r['total_steps']} | reward={r['total_reward']:+.2f}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

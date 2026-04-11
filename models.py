@@ -1,10 +1,3 @@
-"""
-inference.py — Dependency Hell Baseline Agent
-==============================================
-Runs an OpenAI-compatible LLM agent against the Dependency Hell environment.
-Emits structured stdout logs in the required [START] / [STEP] / [END] format.
-"""
-
 import json
 import os
 import sys
@@ -12,56 +5,31 @@ from typing import Optional
 import requests
 from openai import OpenAI
 
-# ============================================================
-# CONFIGURATION — All read from environment variables
-# ============================================================
+API_KEY      = os.environ.get("HF_TOKEN")
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
-
 BENCHMARK    = "dependency-hell"
 MAX_STEPS    = 15
-
-# ============================================================
-# STRUCTURED STDOUT LOGGING — Exact required format
-# ============================================================
 
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
-
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    error_val = str(error).replace('\n', ' ').replace('\r', '') if error else "null"
-    action_clean = str(action).replace('\n', ' ').replace('\r', '')
-    done_val  = str(done).lower()
-    print(
-        f"[STEP] step={step} action={action_clean} reward={reward:.2f} done={done_val} error={error_val}",
-        flush=True,
-    )
-
+    error_val = error if error else "null"
+    done_val = str(done).lower()
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
 def log_end(success: bool, steps: int, rewards: list) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
-        flush=True,
-    )
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
-
-# ============================================================
-# OPENAI TOOL DEFINITION
-# ============================================================
 devops_tools = [
     {
         "type": "function",
         "function": {
             "name": "take_action",
-            "description": (
-                "Execute a DevOps command on the CI/CD server. "
-                "Start by reading files to understand the problem. "
-                "Then overwrite the broken file with your fix. "
-                "Finally call run_build to verify. You MUST call run_build to complete the task."
-            ),
+            "description": "Execute a DevOps command on the CI/CD server. Start by reading files to understand the problem. Then overwrite the broken file with your fix. Finally call run_build to verify. You MUST call run_build to complete the task.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -85,19 +53,14 @@ devops_tools = [
     }
 ]
 
-
-# ============================================================
-# SINGLE TASK AGENT LOOP
-# ============================================================
 def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict:
-    rewards     = []
+    rewards = []
     steps_taken = 0
-    success     = False
+    success = False
 
     log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
 
     try:
-        # --- Reset environment ---
         reset_resp = requests.post(
             f"{ENV_BASE_URL}/reset",
             json={"task_id": task_id},
@@ -106,7 +69,6 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         reset_resp.raise_for_status()
         obs = reset_resp.json()
 
-        # --- Build conversation ---
         messages = [
             {
                 "role": "system",
@@ -128,10 +90,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             },
             {
                 "role": "user",
-                "content": (
-                    f"Task: {task_description}\n\n"
-                    f"Initial state:\n{json.dumps(obs, indent=2)}"
-                )
+                "content": f"Task: {task_description}\n\nInitial state:\n{json.dumps(obs, indent=2)}"
             }
         ]
 
@@ -153,15 +112,15 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
                 steps_taken = step
                 break
 
-            tool_call   = message.tool_calls[0]
+            tool_call = message.tool_calls[0]
             action_args = json.loads(tool_call.function.arguments)
-            action_str  = action_args.get("action_type", "unknown")
+            action_str = action_args.get("action_type", "unknown")
             if action_args.get("file_name"):
                 action_str += f"({action_args['file_name']})"
 
             error_msg = None
-            reward    = 0.01
-            done      = False
+            reward = 0.01
+            done = False
 
             try:
                 env_resp = requests.post(
@@ -172,17 +131,15 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
                 env_resp.raise_for_status()
                 result = env_resp.json()
 
-                obs    = result.get("observation", {})
+                obs = result.get("observation", {})
                 reward = float(result.get("reward", 0.01))
-                done   = bool(result.get("done", False))
-
-                # SAFETY CLAMP — always strictly between 0.01 and 0.99
+                done = bool(result.get("done", False))
                 reward = max(0.01, min(0.99, reward))
 
             except Exception as e:
                 error_msg = str(e)
-                reward    = 0.01
-                done      = False
+                reward = 0.01
+                done = False
 
             rewards.append(reward)
             steps_taken = step
@@ -194,12 +151,12 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
                 "role": "tool",
                 "tool_call_id": tool_call.id,
                 "content": json.dumps({
-                    "terminal_output":  obs.get("terminal_output", ""),
-                    "visible_files":    obs.get("visible_files", []),
-                    "steps_remaining":  obs.get("steps_remaining", 0),
-                    "build_status":     obs.get("build_status", "pending"),
-                    "reward":           reward,
-                    "done":             done
+                    "terminal_output": obs.get("terminal_output", ""),
+                    "visible_files": obs.get("visible_files", []),
+                    "steps_remaining": obs.get("steps_remaining", 0),
+                    "build_status": obs.get("build_status", "pending"),
+                    "reward": reward,
+                    "done": done
                 })
             })
 
@@ -209,13 +166,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         success = len(rewards) > 0 and rewards[-1] >= 0.99
 
     except Exception as e:
-        log_step(
-            step=steps_taken + 1,
-            action="exception",
-            reward=0.01,
-            done=True,
-            error=str(e)
-        )
+        log_step(step=steps_taken + 1, action="exception", reward=0.01, done=True, error=str(e))
         rewards.append(0.01)
         steps_taken += 1
 
@@ -223,19 +174,20 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         log_end(success=success, steps=steps_taken, rewards=rewards)
 
     return {
-        "task_id":      task_id,
-        "success":      success,
-        "final_score":  0.99 if success else 0.01,
-        "total_steps":  steps_taken,
+        "task_id": task_id,
+        "success": success,
+        "final_score": 0.99 if success else 0.01,
+        "total_steps": steps_taken,
         "total_reward": round(sum(rewards), 2)
     }
 
-
-# ============================================================
-# MAIN — RUN ALL TASKS
-# ============================================================
 def main():
-    client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
+    if not API_KEY:
+        print("[END] success=false steps=0 rewards=0.01", flush=True)
+        print("ERROR: Please set HF_TOKEN environment variable.", file=sys.stderr)
+        sys.exit(1)
+
+    client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 
     try:
         tasks_resp = requests.get(f"{ENV_BASE_URL}/tasks", timeout=30)
@@ -248,34 +200,30 @@ def main():
     results = []
 
     for task in tasks:
-        task_id          = task["task_id"]
+        task_id = task["task_id"]
         task_description = task["description"]
 
         try:
             result = run_single_task(client, task_id, task_description)
         except Exception as e:
             result = {
-                "task_id":      task_id,
-                "success":      False,
-                "final_score":  0.01,
-                "total_steps":  0,
+                "task_id": task_id,
+                "success": False,
+                "final_score": 0.01,
+                "total_steps": 0,
                 "total_reward": 0.01
             }
 
         results.append(result)
 
     passed = sum(1 for r in results if r["success"])
-    avg    = sum(r["final_score"] for r in results) / len(results) if results else 0.0
+    avg = sum(r["final_score"] for r in results) / len(results) if results else 0.0
     print(f"\n--- BASELINE SUMMARY ---", file=sys.stderr)
     print(f"Tasks passed : {passed} / {len(results)}", file=sys.stderr)
     print(f"Average score: {avg:.2f}", file=sys.stderr)
     for r in results:
         status = "PASS" if r["success"] else "FAIL"
-        print(
-            f"  {r['task_id']} | {status} | score={r['final_score']:.2f} | steps={r['total_steps']} | reward={r['total_reward']:+.2f}",
-            file=sys.stderr
-        )
-
+        print(f"  {r['task_id']} | {status} | score={r['final_score']:.2f} | steps={r['total_steps']} | reward={r['total_reward']:+.2f}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
