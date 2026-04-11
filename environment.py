@@ -171,7 +171,7 @@ class DependencyHellEnv:
         return self._get_observation(log_output), reward, done, {
             "task_id": self.current_task.task_id,
             "step": self.step_count,
-            "total_reward": self.total_reward
+            "total_reward": round(self.total_reward, 2)
         }
 
     def _grade_task(self) -> dict:
