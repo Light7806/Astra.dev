@@ -20,7 +20,8 @@ API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1"
 MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
 BENCHMARK    = "dependency-hell"
-MAX_STEPS    = 15  # Bumped to 15 to match the environment task limits
+MAX_STEPS    = 15
+
 # ============================================================
 # STRUCTURED STDOUT LOGGING — Exact required format
 # ============================================================
@@ -147,8 +148,14 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             message = completion.choices[0].message
 
             if not message.tool_calls:
-                log_step(step=step, action="no_tool_call", reward=0, done=False, error="model returned no tool call")
-                rewards.append(0)
+                log_step(
+                    step=step,
+                    action="no_tool_call",
+                    reward=0.01,
+                    done=False,
+                    error="model returned no tool call"
+                )
+                rewards.append(0.01)
                 steps_taken = step
                 break
 
@@ -160,7 +167,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
 
             # --- Execute action in environment ---
             error_msg = None
-            reward    = 0
+            reward    = 0.01
             done      = False
 
             try:
@@ -173,17 +180,27 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
                 result = env_resp.json()
 
                 obs    = result.get("observation", {})
-                reward = float(result.get("reward", 0.0))
+                reward = float(result.get("reward", 0.01))
                 done   = bool(result.get("done", False))
+
+                # Clamp reward to strictly (0, 1)
+                reward = max(0.01, min(0.99, reward))
 
             except Exception as e:
                 error_msg = str(e)
+                reward    = 0.01
                 done      = False
 
             rewards.append(reward)
             steps_taken = step
 
-            log_step(step=step, action=action_str, reward=reward, done=done, error=error_msg)
+            log_step(
+                step=step,
+                action=action_str,
+                reward=reward,
+                done=done,
+                error=error_msg
+            )
 
             # --- Update conversation with result ---
             messages.append(message)
@@ -210,22 +227,23 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         log_step(
             step=steps_taken + 1,
             action="exception",
-            reward=0,
+            reward=0.01,
             done=True,
             error=str(e)
         )
-        rewards.append(0.0)
+        rewards.append(0.01)
         steps_taken += 1
 
     finally:
-        # UPDATED: Score is strictly within (0, 1) to pass hackathon validator
-        score = 0.99 if success else 0.01
-        log_end(success=success, steps=steps_taken, rewards=rewards)
+        log_end(
+            success=success,
+            steps=steps_taken,
+            rewards=rewards
+        )
 
     return {
         "task_id":      task_id,
         "success":      success,
-        # UPDATED: Score is strictly within (0, 1)
         "final_score":  0.99 if success else 0.01,
         "total_steps":  steps_taken,
         "total_reward": round(sum(rewards), 2)
@@ -237,8 +255,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
 # ============================================================
 def main():
     if not API_KEY:
-        # Ensure fail log also complies with the (0, 1) rule
-        print("[END] success=false steps=0 score=0.010 rewards=", flush=True)
+        print("[END] success=false steps=0 rewards=0.01", flush=True)
         print("ERROR: Please set HF_TOKEN environment variable.", file=sys.stderr)
         sys.exit(1)
 
@@ -266,15 +283,14 @@ def main():
             result = {
                 "task_id":      task_id,
                 "success":      False,
-                # UPDATED: Score is strictly within (0, 1)
                 "final_score":  0.01,
                 "total_steps":  0,
-                "total_reward": 0.0
+                "total_reward": 0.01
             }
 
         results.append(result)
 
-    # --- Summary to stderr so it doesn't pollute stdout log format ---
+    # --- Summary to stderr ---
     passed = sum(1 for r in results if r["success"])
     avg    = sum(r["final_score"] for r in results) / len(results) if results else 0.0
     print(f"\n--- BASELINE SUMMARY ---", file=sys.stderr)
