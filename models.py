@@ -17,11 +17,7 @@ from openai import OpenAI
 # ============================================================
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN     = os.environ.get("HF_TOKEN")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
-
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
 
 BENCHMARK    = "dependency-hell"
 MAX_STEPS    = 15
