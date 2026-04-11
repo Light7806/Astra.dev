@@ -38,10 +38,10 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, rewards: list, score: float = 0.0) -> None:
+def log_end(success: bool, steps: int, rewards: list) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
         flush=True,
     )
 
@@ -220,7 +220,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
     finally:
         # UPDATED: Score is strictly within (0, 1) to pass hackathon validator
         score = 0.99 if success else 0.01
-        log_end(success=success, steps=steps_taken, rewards=rewards, score=score)
+        log_end(success=success, steps=steps_taken, rewards=rewards)
 
     return {
         "task_id":      task_id,
