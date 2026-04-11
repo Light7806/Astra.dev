@@ -2,13 +2,9 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional, List
 
 # ============================================================
-# 1. ACTION MODEL — What the AI agent is allowed to do
+# 1. ACTION MODEL
 # ============================================================
 class DevOpsAction(BaseModel):
-    """
-    Represents a single action the agent can take in the environment.
-    The agent must always choose one of the four action types.
-    """
     action_type: Literal[
         "read_file",
         "overwrite_file",
@@ -46,16 +42,12 @@ class DevOpsAction(BaseModel):
 
 
 # ============================================================
-# 2. OBSERVATION MODEL — What the agent sees after each action
+# 2. OBSERVATION MODEL
 # ============================================================
 class DevOpsObservation(BaseModel):
-    """
-    The full state snapshot returned to the agent after every step.
-    This is everything the agent can see — nothing more, nothing less.
-    """
     terminal_output: str = Field(
         ...,
-        description="Console output from the last action — build logs, file contents, error messages, or success confirmations."
+        description="Console output from the last action."
     )
     visible_files: List[str] = Field(
         ...,
@@ -87,57 +79,48 @@ class DevOpsObservation(BaseModel):
 
 
 # ============================================================
-# 3. REWARD MODEL — Structured reward signal per step
+# 3. REWARD MODEL
 # ============================================================
 class DevOpsReward(BaseModel):
-    """
-    A structured reward breakdown returned at every step.
-    Provides interpretable signal rather than a raw float —
-    so training logs are readable and partial credit is visible.
-    """
     total: float = Field(
-        ...,
-        description="The net reward for this step. Sum of all components.",
-        ge=-1.0,
-        le=1.0
+        0.01,
+        description="The net reward for this step. Strictly between -0.99 and 0.99.",
+        gt=-1.0,
+        lt=1.0
     )
     task_progress: float = Field(
-        0.0,
-        description="Reward for making measurable progress toward the goal (e.g. correct file edited)."
+        0.01,
+        description="Reward for making measurable progress toward the goal."
     )
     efficiency_penalty: float = Field(
-        0.0,
-        description="Negative reward for wasted actions (e.g. reading a file repeatedly, no-op steps)."
+        0.01,
+        description="Negative reward for wasted actions."
     )
     build_result: float = Field(
-        0.0,
-        description="Reward signal from the build pipeline. +1.0 for full pass, -0.5 for failure."
+        0.01,
+        description="Reward signal from the build pipeline."
     )
     safety_penalty: float = Field(
-        0.0,
-        description="Penalty for destructive or unsafe actions (e.g. deleting production database)."
+        0.01,
+        description="Penalty for destructive or unsafe actions."
     )
 
 
 # ============================================================
-# 4. TASK MODEL — Defines each challenge in the environment
+# 4. TASK MODEL
 # ============================================================
 class DevOpsTask(BaseModel):
-    """
-    Metadata for a single task in the environment.
-    Used by the /tasks endpoint and the environment's reset logic.
-    """
     task_id: str = Field(
         ...,
-        description="Unique identifier for this task (e.g. 'level_1_easy')."
+        description="Unique identifier for this task."
     )
     difficulty: Literal["easy", "medium", "hard"] = Field(
         ...,
-        description="Difficulty tier. Easy tasks have one obvious fix. Hard tasks require careful multi-step reasoning."
+        description="Difficulty tier."
     )
     description: str = Field(
         ...,
-        description="The plain-English mission briefing shown to the agent at the start of the episode."
+        description="The plain-English mission briefing shown to the agent."
     )
     max_steps: int = Field(
         15,
@@ -147,18 +130,14 @@ class DevOpsTask(BaseModel):
     )
     tags: List[str] = Field(
         default_factory=list,
-        description="Category tags for this task (e.g. ['dependencies', 'security', 'config'])."
+        description="Category tags for this task."
     )
 
 
 # ============================================================
-# 5. EPISODE RESULT MODEL — Final summary after episode ends
+# 5. EPISODE RESULT MODEL
 # ============================================================
 class EpisodeResult(BaseModel):
-    """
-    Returned when done=True. Summarises the full episode outcome.
-    Used by run_all.py to build the final evaluation report.
-    """
     task_id: str
     success: bool = Field(
         ...,
