@@ -135,7 +135,6 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         ]
 
         for step in range(1, MAX_STEPS + 1):
-            # --- Ask the model what to do ---
             completion = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=messages,
@@ -148,13 +147,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             message = completion.choices[0].message
 
             if not message.tool_calls:
-                log_step(
-                    step=step,
-                    action="no_tool_call",
-                    reward=0.01,
-                    done=False,
-                    error="model returned no tool call"
-                )
+                log_step(step=step, action="no_tool_call", reward=0.01, done=False, error="model returned no tool call")
                 rewards.append(0.01)
                 steps_taken = step
                 break
@@ -165,7 +158,6 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             if action_args.get("file_name"):
                 action_str += f"({action_args['file_name']})"
 
-            # --- Execute action in environment ---
             error_msg = None
             reward    = 0.01
             done      = False
@@ -183,7 +175,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
                 reward = float(result.get("reward", 0.01))
                 done   = bool(result.get("done", False))
 
-                # Clamp reward to strictly (0, 1)
+                # SAFETY CLAMP — always strictly between 0.01 and 0.99
                 reward = max(0.01, min(0.99, reward))
 
             except Exception as e:
@@ -194,15 +186,8 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             rewards.append(reward)
             steps_taken = step
 
-            log_step(
-                step=step,
-                action=action_str,
-                reward=reward,
-                done=done,
-                error=error_msg
-            )
+            log_step(step=step, action=action_str, reward=reward, done=done, error=error_msg)
 
-            # --- Update conversation with result ---
             messages.append(message)
             messages.append({
                 "role": "tool",
@@ -220,7 +205,6 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             if done:
                 break
 
-        # --- Determine success ---
         success = len(rewards) > 0 and rewards[-1] >= 0.99
 
     except Exception as e:
@@ -235,11 +219,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         steps_taken += 1
 
     finally:
-        log_end(
-            success=success,
-            steps=steps_taken,
-            rewards=rewards
-        )
+        log_end(success=success, steps=steps_taken, rewards=rewards)
 
     return {
         "task_id":      task_id,
@@ -261,14 +241,12 @@ def main():
 
     client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 
-    # --- Fetch tasks from environment server ---
     try:
         tasks_resp = requests.get(f"{ENV_BASE_URL}/tasks", timeout=30)
         tasks_resp.raise_for_status()
         tasks = tasks_resp.json().get("tasks", [])
     except Exception as e:
         print(f"ERROR: Could not reach environment server at {ENV_BASE_URL}: {e}", file=sys.stderr)
-        print("Make sure the server is running: python app.py", file=sys.stderr)
         sys.exit(1)
 
     results = []
@@ -290,7 +268,6 @@ def main():
 
         results.append(result)
 
-    # --- Summary to stderr ---
     passed = sum(1 for r in results if r["success"])
     avg    = sum(r["final_score"] for r in results) / len(results) if results else 0.0
     print(f"\n--- BASELINE SUMMARY ---", file=sys.stderr)

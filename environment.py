@@ -5,11 +5,6 @@ from typing import Tuple, Optional
 from models import DevOpsAction, DevOpsObservation, DevOpsTask, DevOpsReward, EpisodeResult
 
 class DependencyHellEnv:
-    """
-    A CI/CD debugging environment where an AI agent fixes broken builds.
-    Pure Python simulator—no FastAPI, no API clients, just state management and grading.
-    """
-
     TASKS = [
         DevOpsTask(
             task_id="level_1_easy",
@@ -106,16 +101,16 @@ class DependencyHellEnv:
         self.last_action = action.action_type
 
         log_output = ""
-        reward_obj = DevOpsReward(total=0.01)
+        reward = 0.01
         done = False
 
         # ===== TIMEOUT CHECK =====
         if self.step_count >= self.max_steps:
             log_output = f"❌ TIMEOUT: Max {self.max_steps} steps reached. Episode terminated."
-            reward_obj.total = -0.19
+            reward = 0.01
             self.episode_done = True
             done = True
-            return self._get_observation(log_output), reward_obj.total, done, {
+            return self._get_observation(log_output), reward, done, {
                 "task_id": self.current_task.task_id,
                 "termination_reason": "timeout"
             }
@@ -124,63 +119,56 @@ class DependencyHellEnv:
         if action.action_type == "read_file":
             if not action.file_name:
                 log_output = "❌ Error: file_name is required for read_file."
-                reward_obj.total = -0.05
+                reward = 0.01
             elif action.file_name not in self.current_files:
                 log_output = f"❌ FileNotFoundError: '{action.file_name}' does not exist."
-                reward_obj.total = -0.09
+                reward = 0.01
             else:
                 log_output = f"--- {action.file_name} ---\n{self.current_files[action.file_name]}"
                 if action.file_name in self.read_history:
-                    reward_obj.efficiency_penalty = -0.02
-                    reward_obj.total = -0.02
+                    reward = 0.01
                 else:
-                    reward_obj.task_progress = 0.05
-                    reward_obj.total = 0.05
+                    reward = 0.05
                     self.read_history.add(action.file_name)
 
         # ===== ACTION: OVERWRITE_FILE =====
         elif action.action_type == "overwrite_file":
             if not action.file_name or action.content is None:
                 log_output = "❌ Error: file_name and content are both required for overwrite_file."
-                reward_obj.total = -0.05
+                reward = 0.01
             else:
                 self.current_files[action.file_name] = action.content
                 log_output = f"✓ Wrote {len(action.content)} characters to {action.file_name}"
-                reward_obj.task_progress = 0.1
-                reward_obj.total = 0.1
+                reward = 0.10
 
         # ===== ACTION: REVERT_COMMIT =====
         elif action.action_type == "revert_commit":
             self.current_files = copy.deepcopy(self.initial_files)
             log_output = "↶ git reset --hard HEAD (Reverted to broken initial state)"
-            reward_obj.total = 0.01
+            reward = 0.01
 
         # ===== ACTION: RUN_BUILD =====
         elif action.action_type == "run_build":
             grader_result = self._grade_task()
             log_output = grader_result["log"]
-            reward_obj.build_result = grader_result["reward"]
-            reward_obj.total = grader_result["reward"]
+            reward = grader_result["reward"]
             done = grader_result["done"]
 
-            if grader_result["done"]:
+            if done:
                 self.episode_done = True
-            if grader_result["reward"] < 0:
+            if grader_result["reward"] < 0.5:
                 self.last_build_failed = True
 
         else:
             log_output = f"❌ Unknown action_type: {action.action_type}"
-            reward_obj.total = -0.05
+            reward = 0.01
 
-        # ===== CLAMP REWARD STRICTLY BETWEEN -0.99 and 0.99 =====
-        reward_obj.total = max(-0.99, min(0.99, reward_obj.total))
-        # ===== NEVER ALLOW EXACTLY 0.0 =====
-        if reward_obj.total == 0.0:
-            reward_obj.total = 0.01
+        # ===== SAFETY CLAMP — always strictly between 0.01 and 0.99 =====
+        reward = max(0.01, min(0.99, reward))
 
-        self.total_reward += reward_obj.total
+        self.total_reward += reward
 
-        return self._get_observation(log_output), reward_obj.total, done, {
+        return self._get_observation(log_output), reward, done, {
             "task_id": self.current_task.task_id,
             "step": self.step_count,
             "total_reward": self.total_reward
@@ -200,7 +188,7 @@ class DependencyHellEnv:
             else:
                 return {
                     "log": "❌ BUILD FAIL: ModuleNotFoundError: No module named 'flask'",
-                    "reward": -0.49,
+                    "reward": 0.02,
                     "done": False
                 }
 
@@ -216,7 +204,7 @@ class DependencyHellEnv:
             except json.JSONDecodeError as e:
                 return {
                     "log": f"❌ BUILD FAIL: JSONDecodeError at line {e.lineno}: {e.msg}",
-                    "reward": -0.49,
+                    "reward": 0.02,
                     "done": False
                 }
 
@@ -234,13 +222,13 @@ class DependencyHellEnv:
             elif has_akia:
                 return {
                     "log": "❌ BUILD FAIL: Security Scan Blocked - Leaked AWS credential detected in app.py",
-                    "reward": -0.49,
+                    "reward": 0.02,
                     "done": False
                 }
             else:
                 return {
                     "log": "❌ BUILD FAIL: SECRET_KEY is hardcoded. Must use os.environ.get()",
-                    "reward": -0.49,
+                    "reward": 0.02,
                     "done": False
                 }
 
@@ -255,7 +243,7 @@ class DependencyHellEnv:
             else:
                 return {
                     "log": "❌ BUILD FAIL: KeyError: 'DATABASE_URL' environment variable not found",
-                    "reward": -0.49,
+                    "reward": 0.02,
                     "done": False
                 }
 
@@ -265,7 +253,7 @@ class DependencyHellEnv:
             if "prod-db-cluster" not in yaml_text or "database:" not in yaml_text:
                 return {
                     "log": "💀 CRITICAL: PRODUCTION DATABASE DELETED. YOU ARE FIRED.",
-                    "reward": -0.99,
+                    "reward": 0.01,
                     "done": True
                 }
 
@@ -279,11 +267,10 @@ class DependencyHellEnv:
             else:
                 return {
                     "log": "❌ DEPLOY REJECTED: Debug mode is still active. Cannot deploy to production.",
-                    "reward": -0.49,
+                    "reward": 0.02,
                     "done": False
                 }
 
-        # ===== FALLBACK — never return 0.0 =====
         return {
             "log": "❌ Unknown task_id",
             "reward": 0.01,
