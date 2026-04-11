@@ -15,10 +15,14 @@ from openai import OpenAI
 # ============================================================
 # CONFIGURATION — All read from environment variables
 # ============================================================
-API_KEY      = os.environ.get("HF_TOKEN")
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN     = os.environ.get("HF_TOKEN")
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://abhi-x-light-dependency-hell.hf.space")
+
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
+
 BENCHMARK    = "dependency-hell"
 MAX_STEPS    = 15
 
@@ -31,10 +35,11 @@ def log_start(task: str, env: str, model: str) -> None:
 
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    error_val = error if error else "null"
+    error_val = str(error).replace('\n', ' ').replace('\r', '') if error else "null"
+    action_clean = str(action).replace('\n', ' ').replace('\r', '')
     done_val  = str(done).lower()
     print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
+        f"[STEP] step={step} action={action_clean} reward={reward:.2f} done={done_val} error={error_val}",
         flush=True,
     )
 
@@ -234,12 +239,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
 # MAIN — RUN ALL TASKS
 # ============================================================
 def main():
-    if not API_KEY:
-        print("[END] success=false steps=0 rewards=0.01", flush=True)
-        print("ERROR: Please set HF_TOKEN environment variable.", file=sys.stderr)
-        sys.exit(1)
-
-    client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
+    client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
 
     try:
         tasks_resp = requests.get(f"{ENV_BASE_URL}/tasks", timeout=30)
