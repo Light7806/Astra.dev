@@ -66,6 +66,8 @@ def reset_environment(request: Optional[ResetRequest] = None):
 def take_step(request: StepRequest):
     try:
         obs, reward, done, info = env.step(request.action)
+        score = max(0.01, min(0.99, reward))
+        info["score"] = score
         return StepResponse(observation=obs, reward=reward, done=done, info=info)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Step execution failed: {str(e)}")
