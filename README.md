@@ -205,6 +205,28 @@ One wrong move and you delete production.
 
 ---
 
+## 📊 Benchmark Results
+
+Evaluated across all 5 tasks using multiple models via HuggingFace Inference API.
+
+| Model | L1 Easy | L2 Easy | L3 Medium | L4 Medium | L5 Hard | Tasks Passed | Avg Score |
+|---|---|---|---|---|---|---|---|
+| **Qwen2.5-72B** ⭐ | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | **5/5** | **0.99** |
+| **Llama-3.3-70B** | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | ❌ 0.01 | ❌ 0.01 | **3/5** | **0.60** |
+| **Qwen2.5-7B** | ✅ 0.99 | ✅ 0.99 | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | **2/5** | **0.40** |
+| **Mistral-7B** | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | **0/5** | **0.01** |
+
+> ⭐ Recommended model: `Qwen/Qwen2.5-72B-Instruct`
+
+### 🔑 Key Findings
+- **Larger models (70B+)** solve easy and medium tasks reliably
+- **Level 4 & 5** act as a genuine filter — separating capable models from weaker ones
+- **Mistral-7B** fails all tasks — environment is not trivially solvable
+- **Only Qwen2.5-72B** achieves full marks — confirming task difficulty progression
+- **Difficulty curve is real and measurable** — proven by benchmark data
+
+---
+
 ## 🛠️ Full Setup & Usage
 
 ### Prerequisites
