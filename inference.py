@@ -192,7 +192,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
 
 def main():
     if not API_KEY:
-        print("[END] success=false steps=0 rewards=0.01", flush=True)
+        print("[END] success=false steps=0 score=0.010 rewards=0.01", flush=True)
         print("final_score: 0.0100", flush=True)
         print("ERROR: Please set HF_TOKEN environment variable.", file=sys.stderr)
         sys.exit(1)
@@ -221,7 +221,7 @@ def main():
                 "success":      False,
                 "final_score":  0.01,
                 "total_steps":  0,
-                "total_reward": 0.01
+                "total_reward": 0.0
             }
 
         results.append(result)
