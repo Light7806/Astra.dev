@@ -178,10 +178,13 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
     finally:
         log_end(success=success, steps=steps_taken, rewards=rewards)
 
+    final_score = 0.99 if success else 0.01
+    print(f"final_score: {final_score:.4f}", flush=True)
+
     return {
         "task_id":      task_id,
         "success":      success,
-        "final_score":  0.99 if success else 0.01,
+        "final_score":  final_score,
         "total_steps":  steps_taken,
         "total_reward": round(sum(rewards), 2)
     }
@@ -189,6 +192,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
 def main():
     if not API_KEY:
         print("[END] success=false steps=0 rewards=0.01", flush=True)
+        print("final_score: 0.0100", flush=True)
         print("ERROR: Please set HF_TOKEN environment variable.", file=sys.stderr)
         sys.exit(1)
 
@@ -223,6 +227,8 @@ def main():
 
     passed = sum(1 for r in results if r["success"])
     avg    = sum(r["final_score"] for r in results) / len(results) if results else 0.01
+    avg    = max(0.01, min(0.99, avg))
+    print(f"final_score: {avg:.4f}", flush=True)
     print(f"\n--- BASELINE SUMMARY ---", file=sys.stderr)
     print(f"Tasks passed : {passed} / {len(results)}", file=sys.stderr)
     print(f"Average score: {avg:.2f}", file=sys.stderr)
