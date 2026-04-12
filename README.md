@@ -87,7 +87,7 @@ graph TD
     A[🤖 AI Agent\ninference.py] -->|POST /reset| B[🌐 FastAPI Server\napp.py]
     A -->|POST /step| B
     B -->|Python| C[⚙️ DependencyHellEnv\nenvironment.py]
-    C -->|Pydantic Models| D[📦 models.py\nAction · Observation · Reward]
+    C -->|Pydantic Models| D[📦 models.py\nDevOpsAction · DevOpsObservation · DevOpsReward]
     C -->|Grade Task| E[🔍 _grade_task\nGrader Engine]
     E -->|Level 1| F[📦 Flask Dependency]
     E -->|Level 2| G[📝 JSON Syntax]
@@ -103,12 +103,12 @@ graph TD
 ```mermaid
 graph LR
     A[🤖 Agent Action] -->|read_file first time| B[+0.05 ✅ Good exploration]
-    A -->|read_file repeated| C[-0.02 ⚠️ Wasteful]
+    A -->|read_file repeated| C[+0.01 ⚠️ Wasteful]
     A -->|overwrite_file| D[+0.10 ✅ Progress]
     A -->|run_build PASS| E[+0.99 🏆 Task Complete]
-    A -->|run_build FAIL| F[-0.49 ❌ Wrong fix]
-    A -->|timeout| G[-0.19 ⏰ Too slow]
-    A -->|delete production DB| H[-0.99 💀 YOU ARE FIRED]
+    A -->|run_build FAIL| F[+0.02 ❌ Wrong fix]
+    A -->|timeout| G[+0.01 ⏰ Too slow]
+    A -->|delete production DB| H[+0.01 💀 YOU ARE FIRED]
 ```
 
 ---
@@ -158,7 +158,7 @@ Fix the missing flask dependency in requirements.txt.
 ### Level 2 — Easy: JSON Syntax Sabotage
 ```
 The server crashed.
-Fix the syntax error in config.json (missing comma after port line).
+Fix the Syntax Sabotage in config.json (missing comma after 'port' line).
 ```
 - **Grader:** `config.json` parses as valid JSON
 - **Expected fix:** Add the missing comma
@@ -201,25 +201,7 @@ One wrong move and you delete production.
 
 ---
 
-## 📊 Benchmark Results
-
-Evaluated across all 5 tasks using multiple models via HuggingFace Inference API.
-
-| Model | L1 Easy | L2 Easy | L3 Medium | L4 Medium | L5 Hard | Tasks Passed | Avg Score |
-|---|---|---|---|---|---|---|---|
-| **Qwen2.5-72B** ⭐ | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | **5/5** | **0.99** |
-| **Llama-3.3-70B** | ✅ 0.99 | ✅ 0.99 | ✅ 0.99 | ❌ 0.01 | ❌ 0.01 | **3/5** | **0.60** |
-| **Qwen2.5-7B** | ✅ 0.99 | ✅ 0.99 | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | **2/5** | **0.40** |
-| **Mistral-7B** | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | ❌ 0.01 | **0/5** | **0.01** |
-
-> ⭐ Recommended model: `Qwen/Qwen2.5-72B-Instruct`
-
-### 🔑 Key Findings
-- **Larger models (70B+)** solve easy and medium tasks reliably
-- **Level 4 & 5** act as a genuine filter — separating capable models from weaker ones
-- **Mistral-7B** fails all tasks — environment is not trivially solvable
-- **Only Qwen2.5-72B** achieves full marks — confirming task difficulty progression
-- **Difficulty curve is real and measurable** — proven by benchmark data
+---
 
 ---
 
