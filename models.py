@@ -21,11 +21,11 @@ class DevOpsObservation(BaseModel):
     build_status: Literal["pending", "passing", "failing", "timeout"]
 
 class DevOpsReward(BaseModel):
-    total: float = Field(0.01, gt=0.0, lt=1.0)
-    task_progress: float = Field(0.01)
-    efficiency_penalty: float = Field(0.01)
-    build_result: float = Field(0.01)
-    safety_penalty: float = Field(0.01)
+    total: float = Field(0.0, gt=-1.0, lt=1.0)
+    task_progress: float = Field(0.0)
+    efficiency_penalty: float = Field(0.0)
+    build_result: float = Field(0.0)
+    safety_penalty: float = Field(0.0)
 
 class DevOpsTask(BaseModel):
     task_id: str

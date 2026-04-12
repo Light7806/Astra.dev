@@ -49,7 +49,7 @@ class DependencyHellEnv:
         self.current_task: Optional[DevOpsTask] = None
         self.step_count = 0
         self.max_steps = 15
-        self.total_reward = 0.01
+        self.total_reward = 0.0
         self.episode_done = False
         self.read_history = set()
         self.last_action = None
@@ -57,7 +57,7 @@ class DependencyHellEnv:
 
     def reset(self, task_id: str = "level_1_easy") -> DevOpsObservation:
         self.step_count = 0
-        self.total_reward = 0.01
+        self.total_reward = 0.0
         self.episode_done = False
         self.read_history = set()
         self.last_action = None
