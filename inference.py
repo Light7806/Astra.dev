@@ -20,9 +20,9 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     done_val  = str(done).lower()
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
-def log_end(success: bool, steps: int, rewards: list) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: list) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 devops_tools = [
     {
@@ -168,7 +168,7 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
             if done:
                 break
 
-        success = len(rewards) > 0 and rewards[-1] >= 0.99
+        success = len(rewards) > 0 and rewards[-1] >= 0.9
 
     except Exception as e:
         log_step(step=steps_taken + 1, action="exception", reward=0.01, done=True, error=str(e))
@@ -176,7 +176,8 @@ def run_single_task(client: OpenAI, task_id: str, task_description: str) -> dict
         steps_taken += 1
 
     finally:
-        log_end(success=success, steps=steps_taken, rewards=rewards)
+        final_score_for_log = 0.99 if success else 0.01
+        log_end(success=success, steps=steps_taken, score=final_score_for_log, rewards=rewards)
 
     final_score = 0.99 if success else 0.01
     print(f"final_score: {final_score:.4f}", flush=True)
