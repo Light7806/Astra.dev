@@ -222,7 +222,7 @@ def main():
         results.append(result)
 
     passed = sum(1 for r in results if r["success"])
-    avg    = sum(r["final_score"] for r in results) / len(results) if results else 0.0
+    avg    = sum(r["final_score"] for r in results) / len(results) if results else 0.01
     print(f"\n--- BASELINE SUMMARY ---", file=sys.stderr)
     print(f"Tasks passed : {passed} / {len(results)}", file=sys.stderr)
     print(f"Average score: {avg:.2f}", file=sys.stderr)
